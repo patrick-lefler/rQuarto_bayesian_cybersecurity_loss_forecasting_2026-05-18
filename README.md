@@ -3,8 +3,8 @@
 > A FAIR-aligned Monte Carlo model quantifying ransomware loss exposure for fintech firms — translating frequency and severity data from DBIR and IBM into a board-legible VaR distribution.
 
 **Author:** Patrick Lefler
-**Published:** 2026-05-13
-**Rendered:**
+**Published:** 2026-05-18
+**Rendered: html**
 
 ---
 
