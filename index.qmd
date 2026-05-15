@@ -1,0 +1,711 @@
+---
+title: "Bayesian Cybersecurity Loss Forecasting"
+subtitle: "A FAIR-Aligned Ransomware Risk Quantification Model for Fintech Firms"
+author: "Patrick Lefler"
+abstract:
+  "Qualitative risk labels - <b>High, Critical, Red</b> — fail to support the financial
+  decisions boards must make: capital allocation, insurance sizing, control investment,
+  and solvency planning. This project applies the Factor Analysis of Information Risk
+  (FAIR) framework to a ransomware scenario at a small- to mid-market financial
+  technology firm, producing a quantitative loss distribution in place of a label. </br>
+
+  
+  The model combines a Poisson frequency component, calibrated to Verizon's 2024 Data
+  Breach Investigations Report, with a log-normal severity component calibrated to
+  IBM's 2024 Cost of a Data Breach Report. Loss is decomposed into primary loss —
+  incident response, forensics, and system restoration — and secondary loss, which
+  captures regulatory fines, litigation, and reputational damage. A 100,000-trial
+  Monte Carlo simulation aggregates these components into a full Annualized Loss
+  Expectancy distribution. <br/>
+
+ 
+ The base-case results place the 95th percentile ALE at <b>$14.9M</b> and the 99th
+  percentile at <b>$28.6M</b>, with secondary loss accounting for the majority of exposure
+  at every percentile. The VaR 99 to mean ALE ratio of approximately <b>10.6x</b> identifies
+  cyber risk as a structurally distinct tail risk — one that conventional operational
+  risk reserve frameworks are not designed to absorb. The model is fully reproducible,
+  parameter-transparent, and updatable as threat conditions evolve."
+date: May 18, 2026
+format:
+  html:
+    code-fold: true
+    code-copy: true
+    code-overflow: wrap
+    code-tools: true
+    code-summary: "Display code"
+    df-print: kable
+    embed-math: true
+    embed-resources: true
+    fig-align: center
+    fig-height: 6
+    fig-width: 10
+    highlight-style: arrow
+    lightbox: true
+    linkcolor: "#0166CC"
+    number-sections: false
+    page-layout: full
+    smooth-scroll: true
+    theme: sandstone
+    toc: true
+    toc-depth: 3
+    toc-location: right
+    toc-title: "Contents"
+execute:
+  echo: true
+  warning: false
+  message: false
+html-math-method: mathjax
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+# --- Default libraries ---
+library(kableExtra)   # Table formatting
+library(knitr)        # Document rendering
+library(plotly)       # Interactive chart wrapping
+library(scales)       # Axis and label formatting
+library(sessioninfo)  # Session provenance
+library(tidyverse)    # Data manipulation and ggplot2
+
+# --- Project-specific libraries ---
+library(fitdistrplus) # MLE fitting for log-normal severity parameters
+library(mc2d)         # Two-dimensional Monte Carlo simulation
+library(evd)          # Extreme value distributions (GEV, GPD); retained pending EVT decision
+library(actuar)       # Heavy-tailed distributions and compound loss models
+library(patchwork)    # Multi-panel figure composition
+
+# ---------------------------------------------------------------------------
+# Brand colors
+# ---------------------------------------------------------------------------
+brand_primary   <- "#1A1A2E"
+brand_secondary <- "#16213E"
+brand_accent    <- "#0F3460"
+brand_highlight <- "#E94560"
+brand_surface   <- "#F5F5F5"
+brand_text      <- "#1A1A2E"
+
+brand_palette <- c(
+  primary   = brand_primary,
+  secondary = brand_secondary,
+  accent    = brand_accent,
+  highlight = brand_highlight
+)
+
+# ---------------------------------------------------------------------------
+# ggplot2 theme
+# ---------------------------------------------------------------------------
+theme_brand <- function(base_size = 12) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      text             = element_text(family = "Roboto", color = brand_text),
+      plot.title       = element_text(size = base_size + 2, face = "bold",
+                                      color = brand_primary, margin = margin(b = 8)),
+      plot.subtitle    = element_text(size = base_size, color = brand_secondary,
+                                      margin = margin(b = 12)),
+      plot.caption     = element_text(size = base_size - 2, color = "#6E6E73",
+                                      hjust = 0, margin = margin(t = 10)),
+      axis.title       = element_text(size = base_size - 1, color = brand_secondary),
+      axis.text        = element_text(size = base_size - 2, color = brand_text),
+      panel.grid.major = element_line(color = "#E5E5E5", linewidth = 0.4),
+      panel.grid.minor = element_blank(),
+      legend.position  = "bottom",
+      legend.title     = element_text(size = base_size - 1, face = "bold"),
+      legend.text      = element_text(size = base_size - 2),
+      strip.text       = element_text(size = base_size - 1, face = "bold",
+                                      color = brand_primary),
+      plot.background  = element_rect(fill = "#FEFEFA", color = NA),
+      panel.background = element_rect(fill = "#FEFEFA", color = NA)
+    )
+}
+
+theme_set(theme_brand())
+```
+
+## Introduction
+
+Ransomware is the defining financial risk event of the current threat environment — not because it is the most frequent attack vector, but because its cost profile is unlike any other. A single incident can simultaneously trigger direct recovery costs, regulatory exposure, litigation, and reputational damage that compounds over months. For a small- to mid-market fintech firm, which typically operates with lean security staffing, constrained incident response capacity, and heightened regulatory scrutiny, a ransomware event is not a recoverable inconvenience. It is a potential solvency event.
+
+Despite this, most fintech risk registers still treat ransomware as a qualitative category. Analysts label it "High" or "Critical," assign it a traffic-light color, and move on. The problem is structural: qualitative labels carry no financial meaning. A board cannot compare a "High" cybersecurity risk against a loan portfolio's expected credit loss, allocate capital against it, or evaluate whether a proposed control investment is justified relative to the risk it reduces. The vocabulary of qualitative risk assessment and the vocabulary of financial decision-making are mutually unintelligible.
+
+This project applies the Factor Analysis of Information Risk (FAIR) framework to close that gap. FAIR treats risk as the probable frequency and probable magnitude of future financial loss — a definition that maps directly onto the tools financial decision-makers already use. By modeling the two components of risk separately and combining them through Monte Carlo simulation, the analysis produces a distribution of probable annualized loss outcomes for a specific, well-defined scenario: a ransomware incident at a small- to mid-market fintech firm. The output is not a label. It is a loss curve — a range of plausible financial outcomes with associated probabilities, expressed in dollars.
+
+The frequency model draws on incident data from the Verizon Data Breach Investigations Report (DBIR), which documented ransomware as a factor in 23.0% of all confirmed breaches in its 2024 edition, affecting 92.0% of industries and representing the dominant action type in financially motivated system intrusion events. The severity model is calibrated to IBM's 2024 Cost of a Data Breach Report, which placed the average ransomware breach cost at $4.91 million globally, with financial services firms incurring average breach costs of $6.08 million — the second highest of any industry. These figures inform the log-normal severity distribution's parameterization and establish the scenario's empirical grounding.
+
+The analysis decomposes total loss into two components following FAIR's taxonomy. Primary loss captures the direct costs of the event itself: incident response, forensic investigation, system restoration, and ransom payment if applicable. Secondary loss captures the downstream consequences: regulatory fines, litigation, notification costs, and reputational damage expressed as lost business. This separation matters because the two components have different time horizons, different probability structures, and different implications for risk mitigation. Collapsing them into a single figure obscures information a board needs.
+
+The final output — an Annualized Loss Expectancy (ALE) distribution with Value-at-Risk (VaR) figures at the 95th and 99th percentiles — gives the board a financially legible risk statement: not "ransomware risk is high," but "there is a 5.0% probability that annual loss from a ransomware event exceeds $X.XM." That is a number a CFO can work with.
+
+
+## The FAIR Model
+
+FAIR is a quantitative risk framework developed by Jack Jones in 2005 and maintained by the FAIR Institute as an open standard. Its core claim is straightforward: risk is the probable frequency and probable magnitude of future loss. Everything else in the framework is a structured method for estimating those two quantities with appropriate precision — and for communicating the result in financial terms a decision-maker can act on.
+
+The framework decomposes risk into two primary components. Loss Event Frequency (LEF) answers the question: how often, in a given year, is a loss event likely to occur? Loss Magnitude (LM) answers: when a loss event occurs, how much does it cost? Risk — expressed as annualized loss exposure — is derived by combining these two components across thousands of simulated scenarios. The result is not a single number but a distribution of outcomes, each with an associated probability.
+
+This project follows that structure directly. LEF is modeled as a Poisson random variable, which is the natural choice for count-based events that occur independently over a fixed time interval. LM is modeled as a log-normal random variable, which captures the right-skewed, strictly positive character of financial loss data — most incidents cost a moderate amount, but the tail extends far to the right. A Monte Carlo simulation draws repeatedly from both distributions, multiplies the draws, and accumulates the results into the ALE distribution shown in the Results section.
+
+FAIR further decomposes LM into two components that this analysis treats separately. Primary loss covers the direct, immediate costs of the event: incident response labor, forensic investigation, system restoration, and ransom payment where applicable. Secondary loss covers the downstream consequences that materialize over a longer horizon: regulatory fines, litigation and legal defense, breach notification and credit monitoring, and reputational damage expressed as lost or deferred revenue. The two components are modeled with distinct log-normal parameterizations and combined additively in each simulation trial. Table 1 summarizes the full model structure.
+
+```{r}
+#| label: tbl-fair-model
+#| echo: true
+
+fair_model <- tibble::tribble(
+  ~`FAIR Component`,      ~`Plain-English Definition`,                                              ~`This Model`,                          ~`Distribution`,
+  "Threat Event Frequency (TEF)", "How often a threat actor attempts an action against an asset",  "Ransomware attempt rate, financial sector", "Poisson (λ informed by DBIR)",
+  "Vulnerability",                "Probability that a threat event results in a loss event",        "Proportion of attempts that succeed",      "Implicit in LEF parameterization",
+  "Loss Event Frequency (LEF)",   "How often a loss event actually occurs in a given year",         "Expected ransomware incidents per year",    "Poisson (λ = 0.30)",
+  "Primary Loss Magnitude (PLM)", "Direct, immediate financial cost of the loss event",             "IR, forensics, restoration, ransom",        "Log-normal (μ, σ from IBM CODB)",
+  "Secondary Loss Magnitude (SLM)", "Downstream costs: fines, litigation, reputational damage",    "Regulatory, legal, notification, lost business", "Log-normal (μ, σ derived)",
+  "Loss Magnitude (LM)",          "Total per-event cost: PLM + SLM",                               "Combined per-incident loss",               "Sum of PLM and SLM draws",
+  "Annualized Loss Expectancy (ALE)", "Expected total loss over a one-year horizon",               "Annual loss distribution from simulation",  "Monte Carlo aggregate (n = 100,000)"
+)
+
+kable(
+  fair_model,
+  format    = "html",
+  caption   = "FAIR Model Structure — Component Definitions and Model Choices",
+  col.names = c("FAIR Component", "Plain-English Definition", "This Model", "Distribution")
+) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width        = TRUE,
+    position          = "left",
+    font_size         = 13
+  ) |>
+  column_spec(1, bold = TRUE, width = "18%") |>
+  column_spec(2, width = "28%") |>
+  column_spec(3, width = "28%") |>
+  column_spec(4, width = "26%")
+```
+
+One departure from standard FAIR practice is worth stating explicitly. Most FAIR practitioners parameterize frequency and magnitude using the beta-PERT distribution, which asks subject matter experts to supply a minimum, most likely, and maximum estimate. This project substitutes Poisson and log-normal distributions in their place, parameterized directly from published industry data rather than expert elicitation. The advantage is empirical grounding: the parameters are auditable and traceable to cited sources rather than dependent on a specific analyst's judgment. The tradeoff is that the model is less flexible for organizations with internal loss data that deviates materially from industry averages. Section 3.4 documents all parameter values and their sources in full.
+
+
+## Data & Parameter Calibration
+
+All model parameters are derived from two publicly available annual reports: the Verizon Data Breach Investigations Report (DBIR) and the IBM Cost of a Data Breach Report. No proprietary data, internal loss histories, or undocumented assumptions are used. Every value in Table 2 can be verified against the cited source.
+
+**Frequency parameterization.** The Poisson lambda (λ) represents the expected number of ransomware loss events per year for a small- to mid-market fintech firm. The 2024 DBIR reported ransomware as a confirmed action in 23.0% of all verified breaches across 10,626 incidents, affecting 92.0% of industries. Within the financial and insurance sector specifically, system intrusion — the incident classification pattern that encompasses ransomware — was among the top breach patterns. For a firm of this size and sector, a base rate of approximately 0.30 expected incidents per year (roughly one event every three to four years) is a defensible central estimate, consistent with DBIR sector-level frequency data and the operational profile of a firm without a mature security operations capability. The Poisson distribution naturally allows for zero-event years (the most probable single outcome at λ = 0.30) while accommodating the possibility of two or more events in a given year.
+
+**Severity parameterization.** The log-normal distribution is parameterized on the natural-log scale using μ (the mean of log-losses) and σ (the standard deviation of log-losses). These are back-solved from the IBM report's published percentile figures using `qlnorm()`. The 2024 IBM Cost of a Data Breach Report placed the average ransomware breach cost at $4.91M globally and the average for financial services firms at $6.08M — the second highest of any industry. The global average breach cost of $4.88M was composed of approximately $2.08M in direct costs (detection, escalation, notification, and response) and $2.80M in post-breach and lost-business costs. This decomposition directly informs the primary/secondary split described below.
+
+**Primary/secondary loss split.** IBM's 2024 report attributed $2.80M of the $4.88M global average — approximately 57.4% — to lost business, post-breach customer support, and regulatory fines. The complementary 42.6% covers detection, escalation, notification, and response activities. Applied to the financial services average of $6.08M and rounded to one decimal place, this yields a working split of approximately $2.6M primary and $3.5M secondary. These figures serve as the 50th-percentile anchors for each log-normal distribution. The 90th percentile is set at 2.5× the median for primary loss and 3.5× the median for secondary loss, reflecting the heavier regulatory and litigation tail that financial services firms face relative to the global average. Both multipliers are documented assumptions, not derived values, and are flagged as sensitivity parameters in the Results section.
+
+
+### Load Parameters Workflow
+
+```{r}
+#| label: load-parameters
+#| echo: true
+
+# ---------------------------------------------------------------------------
+# Single source of truth for all model parameters.
+# To update for a new report year: edit data/parameters.csv only.
+# No changes to simulation code are required provided column names are stable.
+# ---------------------------------------------------------------------------
+params_raw <- readr::read_csv(
+  "data/parameters.csv",
+  show_col_types = FALSE
+)
+
+# Verify required parameter IDs are present before proceeding
+required_ids <- c(
+  "LEF_LAMBDA",
+  "PLM_P50", "PLM_P90",
+  "SLM_P50", "SLM_P90",
+  "MC_TRIALS", "MC_SEED"
+)
+
+missing_ids <- setdiff(required_ids, params_raw$parameter_id)
+
+if (length(missing_ids) > 0) {
+  stop(
+    "parameters.csv is missing required parameter IDs: ",
+    paste(missing_ids, collapse = ", ")
+  )
+}
+
+message("parameters.csv loaded successfully — ",
+        nrow(params_raw), " rows, ",
+        n_distinct(params_raw$source_id), " source(s).")
+```
+
+
+### Parameter Calibration
+
+```{r}
+#| label: tbl-parameters
+#| echo: true
+
+params <- tibble::tribble(
+  ~Parameter,             ~Symbol,   ~Value,       ~Basis,                                ~Source,
+  "Poisson rate (annual)", "λ",      "0.30",        "~1 event per 3–4 years; fintech, no mature SOC", "Verizon DBIR 2024 — financial sector system intrusion frequency",
+  "Primary LM — median",  "P₅₀",    "$2.6M",       "42.6% of $6.08M financial services average",     "IBM Cost of a Data Breach 2024 — financial industry",
+  "Primary LM — 90th pct","P₉₀",    "$6.5M",       "2.5× median; moderate operational tail",          "Derived assumption — see sensitivity note",
+  "Secondary LM — median","S₅₀",    "$3.5M",       "57.4% of $6.08M financial services average",     "IBM Cost of a Data Breach 2024 — lost business + post-breach costs",
+  "Secondary LM — 90th pct","S₉₀",  "$12.2M",      "3.5× median; regulatory and litigation tail",    "Derived assumption — see sensitivity note",
+  "Monte Carlo trials",   "n",       "100,000",     "Standard for stable percentile convergence",      "FAIR Institute best practice",
+  "Random seed",          "—",       "42",          "Reproducibility",                                 "—"
+)
+
+kable(
+  params,
+  format    = "html",
+  caption   = "Model Parameter Calibration — Sources and Values",
+  col.names = c("Parameter", "Symbol", "Value", "Basis", "Source")
+) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width        = TRUE,
+    position          = "left",
+    font_size         = 13
+  ) |>
+  column_spec(1, bold = TRUE, width = "20%") |>
+  column_spec(2, width = "8%") |>
+  column_spec(3, width = "10%") |>
+  column_spec(4, width = "27%") |>
+  column_spec(5, width = "35%")
+```
+
+Two parameters warrant specific attention before the model is run. First, λ = 0.30 is a sector-level estimate for a firm without compensating controls. Organizations with mature endpoint detection, tested backups, and network segmentation would reasonably use a lower value; organizations with known gaps or prior incidents might use a higher one. The Results section includes a brief sensitivity sweep across λ ∈ [0.10, 0.30, 0.50] to show how the ALE distribution shifts. Second, the 90th-percentile multipliers for primary and secondary loss are the single most consequential assumptions in the model — the tail behavior of the ALE distribution is more sensitive to σ than to λ. These multipliers are conservative by design and should be revisited if the organization has internal loss data that suggests a narrower or wider severity range.
+
+
+## The Loss Model
+
+The model has three sequential layers: a frequency draw, a severity draw for each event that occurs, and an aggregation step that sums the per-event losses into an annual total. Each layer is implemented in R and runs 100,000 simulation trials to ensure stable convergence at the tail percentiles that matter most for the VaR output.
+
+### Frequency model
+
+LEF follows a Poisson distribution with λ = 0.30. In each trial, a single draw from `rpois(1, lambda = 0.30)` returns the number of ransomware loss events that occur in that simulated year. At λ = 0.30, roughly 74.1% of trials produce zero events, 22.2% produce exactly one event, and the remaining 3.7% produce two or more. This distribution is not pessimistic — it reflects the base rate for a firm without a mature security operations capability, as calibrated to the DBIR financial sector data documented in Section 3.4.
+
+### Severity model
+
+When one or more events occur in a trial, each event draws an independent loss amount from the primary and secondary log-normal distributions. The log-normal parameters μ and σ are back-solved from the IBM-derived 50th and 90th percentile anchors using `qlnorm()`. This back-solve is performed once at the top of the simulation chunk and cached as scalar constants so the parameterization is fully transparent and reproducible.
+
+The back-solve for a log-normal given two percentile anchors uses the system of equations:
+
+$$\mu = \frac{\ln(P_{50}) \cdot z_{90} - \ln(P_{90}) \cdot z_{50}}{z_{90} - z_{50}}$$
+
+$$\sigma = \frac{\ln(P_{90}) - \ln(P_{50})}{z_{90} - z_{50}}$$
+
+where $z_{50} = 0$ and $z_{90} \approx 1.282$ are the standard normal quantiles corresponding to the 50th and 90th percentiles respectively. This simplifies to $\mu = \ln(P_{50})$ and $\sigma = (\ln(P_{90}) - \ln(P_{50})) / 1.282$.
+
+### Simulation engine
+
+Per-event total loss is the sum of the primary and secondary draws. Annual loss in each trial is the sum of per-event losses across however many events occurred — zero if no events occurred. The full ALE distribution is the vector of 100,000 annual totals.
+
+```{r}
+#| label: simulation
+#| cache: true
+
+# ---------------------------------------------------------------------------
+# Pull all parameter values from params_raw (loaded in load-parameters chunk).
+# To change any value: edit data/parameters.csv — do not edit here.
+# ---------------------------------------------------------------------------
+get_param <- function(id) {
+  params_raw |>
+    dplyr::filter(parameter_id == id) |>
+    dplyr::pull(value_numeric)
+}
+
+lambda_base <- get_param("LEF_LAMBDA")
+n_trials    <- as.integer(get_param("MC_TRIALS"))
+mc_seed     <- as.integer(get_param("MC_SEED"))
+
+primary_p50 <- get_param("PLM_P50")
+primary_p90 <- get_param("PLM_P90")
+secondary_p50 <- get_param("SLM_P50")
+secondary_p90 <- get_param("SLM_P90")
+
+set.seed(mc_seed)
+
+# ---------------------------------------------------------------------------
+# Back-solve log-normal parameters from IBM percentile anchors
+# mu    = log(P50)
+# sigma = (log(P90) - log(P50)) / qnorm(0.90)
+# ---------------------------------------------------------------------------
+z90 <- qnorm(0.90)   # 1.281552
+
+primary_mu    <- log(primary_p50)
+primary_sigma <- (log(primary_p90) - log(primary_p50)) / z90
+
+secondary_mu    <- log(secondary_p50)
+secondary_sigma <- (log(secondary_p90) - log(secondary_p50)) / z90
+
+# ---------------------------------------------------------------------------
+# Core simulation function — returns vector of annual totals
+# ---------------------------------------------------------------------------
+simulate_ale <- function(lambda, n = n_trials,
+                         pmu = primary_mu,   psig = primary_sigma,
+                         smu = secondary_mu, ssig = secondary_sigma) {
+
+  vapply(seq_len(n), function(i) {
+
+    n_events <- rpois(1, lambda)
+
+    if (n_events == 0L) return(0)
+
+    primary_loss   <- rlnorm(n_events, meanlog = pmu, sdlog = psig)
+    secondary_loss <- rlnorm(n_events, meanlog = smu, sdlog = ssig)
+
+    sum(primary_loss + secondary_loss)
+
+  }, numeric(1))
+}
+
+# ---------------------------------------------------------------------------
+# Base-case simulation (λ = 0.30)
+# ---------------------------------------------------------------------------
+ale_base <- simulate_ale(lambda = lambda_base)
+
+# ---------------------------------------------------------------------------
+# Decomposed simulations — primary and secondary separately for breakdown chart
+# ---------------------------------------------------------------------------
+simulate_decomposed <- function(lambda, n = n_trials,
+                                pmu = primary_mu,   psig = primary_sigma,
+                                smu = secondary_mu, ssig = secondary_sigma) {
+
+  results <- vapply(seq_len(n), function(i) {
+
+    n_events <- rpois(1, lambda)
+
+    if (n_events == 0L) return(c(primary = 0, secondary = 0))
+
+    p_loss <- sum(rlnorm(n_events, meanlog = pmu, sdlog = psig))
+    s_loss <- sum(rlnorm(n_events, meanlog = smu, sdlog = ssig))
+
+    c(primary = p_loss, secondary = s_loss)
+
+  }, numeric(2))
+
+  tibble::tibble(
+    primary   = results["primary",  ],
+    secondary = results["secondary", ]
+  )
+}
+
+decomp_base <- simulate_decomposed(lambda = lambda_base)
+
+# ---------------------------------------------------------------------------
+# Sensitivity simulations — λ ∈ {0.10, 0.30, 0.50}
+# ---------------------------------------------------------------------------
+ale_low  <- simulate_ale(lambda = 0.10)
+ale_high <- simulate_ale(lambda = 0.50)
+
+sensitivity_df <- dplyr::bind_rows(
+  tibble::tibble(lambda = "λ = 0.10 (mature controls)", ale = ale_low),
+  tibble::tibble(lambda = "λ = 0.30 (base case)",       ale = ale_base),
+  tibble::tibble(lambda = "λ = 0.50 (elevated exposure)", ale = ale_high)
+) |>
+  dplyr::mutate(lambda = factor(lambda, levels = c(
+    "λ = 0.10 (mature controls)",
+    "λ = 0.30 (base case)",
+    "λ = 0.50 (elevated exposure)"
+  )))
+
+# ---------------------------------------------------------------------------
+# Summary statistics
+# ---------------------------------------------------------------------------
+var_summary <- tibble::tibble(
+  Metric      = c("Mean ALE", "Median ALE (P50)",
+                  "75th Percentile", "95th Percentile (VaR 95)",
+                  "99th Percentile (VaR 99)"),
+  `Total ALE` = quantile(ale_base, probs = c(NA, 0.50, 0.75, 0.95, 0.99),
+                         na.rm = TRUE) |>
+    (\(q) c(mean(ale_base), q[2:5]))(),
+  `Primary`   = quantile(decomp_base$primary,
+                         probs = c(NA, 0.50, 0.75, 0.95, 0.99),
+                         na.rm = TRUE) |>
+    (\(q) c(mean(decomp_base$primary), q[2:5]))(),
+  `Secondary` = quantile(decomp_base$secondary,
+                         probs = c(NA, 0.50, 0.75, 0.95, 0.99),
+                         na.rm = TRUE) |>
+    (\(q) c(mean(decomp_base$secondary), q[2:5]))()
+)
+```
+
+
+## Results
+
+The 100,000-trial Monte Carlo simulation produces a full distribution of probable annual loss outcomes for the base-case scenario (λ = 0.30). The three charts below present that distribution from three angles: the overall ALE histogram with primary/secondary decomposition, the exceedance probability curve with VaR thresholds marked, and the sensitivity of the ALE distribution to the frequency assumption.
+
+### Annualized loss expectancy (ALE) distribution
+
+::: {.callout-note icon = false}
+## A primer on annualized loss epectancy distributions
+An annualized loss expectancy distribution displays the range of total financial losses a firm might absorb in a single year from a specific risk event. Rather than predicting one outcome, it maps thousands of simulated scenarios into a curve — revealing not just what the average year looks like, but how bad the worst 5% or 1% of years could be. The shape of the distribution carries as much information as any single number within it: a wide, right-skewed curve signals that catastrophic outcomes, while rare, are plausible and should anchor capital and insurance planning rather than the average alone.
+::: 
+
+```{r}
+#| label: fig-ale-histogram
+#| fig-cap: "Figure 1: Simulated annual loss distribution decomposed into primary and secondary loss components (λ = 0.30, n = 100,000 trials). Trials with zero events — approximately 74.1% of the distribution — are excluded to focus the view on loss-event years. VaR thresholds at the 95th and 99th percentiles are marked. The long right tail reflects the log-normal severity assumption; most loss-event years cluster below $5M, but the tail extends well beyond $20M."
+
+ale_plot_df <- tibble::tibble(
+  primary   = decomp_base$primary,
+  secondary = decomp_base$secondary,
+  total     = decomp_base$primary + decomp_base$secondary
+) |>
+  dplyr::filter(total > 0) |>
+  tidyr::pivot_longer(c(primary, secondary),
+                      names_to  = "component",
+                      values_to = "loss") |>
+  dplyr::mutate(
+    component = dplyr::recode(component,
+                              primary   = "Primary loss",
+                              secondary = "Secondary loss"),
+    loss_m = loss / 1e6
+  )
+
+var_95 <- quantile(ale_base[ale_base > 0], 0.95) / 1e6
+var_99 <- quantile(ale_base[ale_base > 0], 0.99) / 1e6
+
+p_hist <- ggplot(ale_plot_df, aes(x = loss_m, fill = component)) +
+  geom_histogram(
+    binwidth = 0.5,
+    position = "stack",
+    alpha    = 0.85,
+    color    = "white",
+    linewidth = 0.15
+  ) +
+  geom_vline(xintercept = var_95, color = brand_highlight,
+             linewidth = 0.8, linetype = "dashed") +
+  geom_vline(xintercept = var_99, color = brand_primary,
+             linewidth = 0.8, linetype = "dashed") +
+  annotate("text", x = var_95 + 0.3, y = Inf,
+           label = paste0("VaR 95\n$", round(var_95, 1), "M"),
+           vjust = 1.4, hjust = 0, size = 3.2,
+           color = brand_highlight) +
+  annotate("text", x = var_99 + 0.3, y = Inf,
+           label = paste0("VaR 99\n$", round(var_99, 1), "M"),
+           vjust = 1.4, hjust = 0, size = 3.2,
+           color = brand_primary) +
+  scale_fill_manual(
+    values = c("Primary loss"   = brand_accent,
+               "Secondary loss" = brand_highlight),
+    name   = NULL
+  ) +
+  scale_x_continuous(
+    labels = scales::dollar_format(suffix = "M", scale = 1),
+    limits = c(0, 30)
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = "Annual loss ($M)",
+    y = "Simulation trials"
+  ) +
+  theme_brand()
+
+ggplotly(p_hist, tooltip = c("x", "y", "fill")) |>
+  layout(legend = list(orientation = "h", y = -0.15))
+```
+
+### Exceedance probability curve
+
+::: {.callout-note icon = false}
+## A primer on exceedance probability curves
+An exceedance probability curve answers the question for every dollar threshold on the horizontal axis: what is the probability that annual loss exceeds that amount? Reading from left to right, the curve declines as the threshold rises — losses above $1M are more probable than losses above $10M. The curve does not predict when a loss will occur; it quantifies how much financial exposure sits in the tail of the distribution. The gap between the VaR 95 and VaR 99 thresholds — visible as a flat stretch near the bottom of the curve — measures the additional exposure a firm accepts by planning only to the 95th percentile.
+:::
+
+```{r}
+#| label: fig-exceedance
+#| fig-cap: "Figure 2: Exceedance probability curve — the probability that annual loss exceeds a given dollar threshold (λ = 0.30, n = 100,000 trials, loss-event years only). The curve declines steeply below $5M, reflecting the concentration of moderate-cost events, then flattens into a long tail. At the VaR 95 threshold, there is a 5.0% probability of annual loss exceeding that figure; at VaR 99, a 1.0% probability. The gap between the two thresholds measures the tail risk premium — the additional exposure a firm accepts by planning only to the 95th percentile."
+
+exceedance_df <- tibble::tibble(loss = ale_base[ale_base > 0] / 1e6) |>
+  dplyr::arrange(loss) |>
+  dplyr::mutate(exceed_prob = 1 - (dplyr::row_number() / dplyr::n()))
+
+p_exceed <- ggplot(exceedance_df,
+                   aes(x = loss, y = exceed_prob)) +
+  geom_line(color = brand_accent, linewidth = 0.7) +
+  geom_vline(xintercept = var_95, color = brand_highlight,
+             linewidth = 0.8, linetype = "dashed") +
+  geom_vline(xintercept = var_99, color = brand_primary,
+             linewidth = 0.8, linetype = "dashed") +
+  geom_hline(yintercept = 0.05, color = brand_highlight,
+             linewidth = 0.4, linetype = "dotted") +
+  geom_hline(yintercept = 0.01, color = brand_primary,
+             linewidth = 0.4, linetype = "dotted") +
+  annotate("text", x = var_95 + 0.3, y = 0.20,
+           label = paste0("VaR 95\n$", round(var_95, 1), "M"),
+           hjust = 0, size = 3.2, color = brand_highlight) +
+  annotate("text", x = var_99 + 0.3, y = 0.12,
+           label = paste0("VaR 99\n$", round(var_99, 1), "M"),
+           hjust = 0, size = 3.2, color = brand_primary) +
+  scale_x_continuous(
+    labels = scales::dollar_format(suffix = "M", scale = 1),
+    limits = c(0, 30)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    limits = c(0, 1)
+  ) +
+  labs(
+    x = "Annual loss threshold ($M)",
+    y = "P(Annual loss exceeds threshold)"
+  ) +
+  theme_brand()
+
+ggplotly(p_exceed, tooltip = c("x", "y"))
+```
+
+### Value at Risk (VaR) summary table
+
+```{r}
+#| label: tbl-var-summary
+#| echo: true
+
+var_display <- tibble::tibble(
+  Metric = c(
+    "Mean ALE",
+    "Median ALE (P50)",
+    "75th Percentile",
+    "95th Percentile — VaR 95",
+    "99th Percentile — VaR 99"
+  ),
+  `Total ALE` = c(
+    mean(ale_base),
+    quantile(ale_base, 0.50),
+    quantile(ale_base, 0.75),
+    quantile(ale_base, 0.95),
+    quantile(ale_base, 0.99)
+  ),
+  `Primary Loss` = c(
+    mean(decomp_base$primary),
+    quantile(decomp_base$primary, 0.50),
+    quantile(decomp_base$primary, 0.75),
+    quantile(decomp_base$primary, 0.95),
+    quantile(decomp_base$primary, 0.99)
+  ),
+  `Secondary Loss` = c(
+    mean(decomp_base$secondary),
+    quantile(decomp_base$secondary, 0.50),
+    quantile(decomp_base$secondary, 0.75),
+    quantile(decomp_base$secondary, 0.95),
+    quantile(decomp_base$secondary, 0.99)
+  )
+) |>
+  dplyr::mutate(dplyr::across(where(is.numeric),
+                \(x) scales::dollar(x, scale = 1e-6,
+                                    suffix = "M", accuracy = 0.1)))
+
+kable(
+  var_display,
+  format    = "html",
+  caption   = "Table 3: ALE Distribution Summary — Base Case (λ = 0.30)",
+  col.names = c("Metric", "Total ALE", "Primary Loss", "Secondary Loss")
+) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width        = TRUE,
+    position          = "left",
+    font_size         = 13
+  ) |>
+  column_spec(1, bold = TRUE, width = "35%") |>
+  row_spec(c(4, 5), bold = TRUE, background = "#F5F5F5")
+```
+
+### Sensitivity to frequency assumption
+
+```{r}
+#| label: fig-sensitivity
+#| fig-cap: "Figure 3: Sensitivity of the ALE distribution to the Poisson frequency parameter λ (n = 100,000 trials per scenario, loss-event years only). Moving from λ = 0.10 to λ = 0.50 shifts both the central mass and the tail of the distribution substantially — the VaR 95 roughly triples across that range. This sensitivity underscores that frequency is not a cosmetic input: an organization with a strong security posture and λ closer to 0.10 faces a materially different risk profile than one with known control gaps at λ = 0.50."
+
+sens_nonzero <- sensitivity_df |>
+  dplyr::filter(ale > 0) |>
+  dplyr::mutate(ale_m = ale / 1e6)
+
+p_sens <- ggplot(sens_nonzero, aes(x = ale_m, color = lambda, fill = lambda)) +
+  geom_density(alpha = 0.15, linewidth = 0.7) +
+  scale_color_manual(
+    values = c(
+      "λ = 0.10 (mature controls)"     = brand_accent,
+      "λ = 0.30 (base case)"           = brand_secondary,
+      "λ = 0.50 (elevated exposure)"   = brand_highlight
+    ),
+    name = NULL
+  ) +
+  scale_fill_manual(
+    values = c(
+      "λ = 0.10 (mature controls)"     = brand_accent,
+      "λ = 0.30 (base case)"           = brand_secondary,
+      "λ = 0.50 (elevated exposure)"   = brand_highlight
+    ),
+    name = NULL
+  ) +
+  scale_x_continuous(
+    labels = scales::dollar_format(suffix = "M", scale = 1),
+    limits = c(0, 40)
+  ) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 0.01)) +
+  labs(
+    x = "Annual loss ($M)",
+    y = "Density"
+  ) +
+  theme_brand()
+
+ggplotly(p_sens, tooltip = c("x", "y", "colour")) |>
+  layout(legend = list(orientation = "h", y = -0.15))
+```
+
+## Insights & Conclusion
+
+Five findings from the simulation stand out as decision-relevant for a fintech board. They are not the most obvious outputs of the model — they are the ones that change what a board should do.
+
+**Secondary loss is the dominant risk driver, not primary loss.** Across every percentile in Table 3, secondary loss exceeds primary loss — and the gap widens as the percentile rises. At the mean, secondary loss accounts for roughly 57% of total ALE. At the 99th percentile, the proportion is higher still, because the regulatory and litigation tail is heavier than the operational response tail. This is the figure that should drive the board's risk mitigation prioritization. Investing in faster breach detection and containment — which reduces primary loss — is necessary but not sufficient. The larger exposure sits in the regulatory and legal aftermath, which means legal preparedness, regulatory relationship management, and breach notification protocols are at least as important as technical controls.
+
+**The difference between VaR 95 and VaR 99 is not a rounding error.** The gap between the 95th and 99th percentile ALE figures — approximately $13.7M in this simulation — represents the additional loss absorbed in the worst 1.0% of years relative to the worst 5.0% of years. For a small- to mid-market fintech firm with limited capital reserves, this tail premium is the number that belongs in the board's capital adequacy discussion, not the mean ALE. The mean is useful for budgeting insurance and control investment; the 99th percentile is the number relevant to solvency planning.
+
+**Frequency is not a background assumption — it is a management decision.** The sensitivity analysis in Figure 3 makes this concrete. The difference between λ = 0.10 and λ = 0.50 is not a difference in how bad the threat environment is — it is a difference in how effective the firm's controls are. A firm that invests in endpoint detection, network segmentation, and tested backup recovery is modeling a λ closer to 0.10. A firm with known gaps in those areas is closer to λ = 0.50. The ALE distribution shifts materially between those two values. Security investment, framed this way, is not a cost center — it is a direct reduction in the expected value of the loss distribution, measurable in dollars.
+
+::: {.callout-important icon = false}
+## Two additional insights for senior risk executives and board members
+:::
+
+**The median ALE of $0.0M is not reassuring; it is a structural warning.** Table 3 shows a median annual loss of zero, which follows directly from the Poisson frequency model: at λ = 0.30, approximately 74.1% of simulated years produce no ransomware event at all. A board that anchors on the median as its planning figure has miscalibrated its risk posture in a specific and dangerous way. This is a well-documented failure mode in low-frequency, high-severity risk management — years pass without incident, controls atrophy, budgets compress, and the organization interprets silence as safety. The correct planning figures for capital allocation, insurance sizing, and control investment are the mean ($2.7M) and the tail percentiles. The median is not zero because the risk is small; it is zero because ransomware is a rare but severe event. That distinction is the entire point of this model.
+
+**The ratio of VaR 99 to mean ALE is the leverage ratio of this risk; and it is extreme.** At $28.6M VaR 99 against a $2.7M mean ALE, the tail-to-mean ratio is approximately 10.6×. In financial risk terms this is extraordinary tail leverage. A well-diversified investment-grade credit portfolio typically carries a VaR 99 to expected loss ratio of 3–5×; a concentrated single-name exposure might reach 7–8×. Cyber risk at 10.6× sits outside the range most operational risk frameworks are designed to handle. The practical implication is direct: conventional operational risk reserve methodologies — which size capital as a multiple of expected loss — will systematically undercapitalize against cyber tail events. Boards that govern fintech firms need to recognize that the insurance and capital structures appropriate for market or credit risk require material adjustment before they are fit for purpose against a distribution with this tail profile.
+
+### Conclusion
+
+The model presented here is deliberately constrained. It uses two public data sources, two distributional assumptions, and a simulation engine that fits in a single code chunk. That constraint is a feature. A more complex model would require proprietary data, longer calibration cycles, and a level of statistical sophistication that distances the output from the people who need to act on it. The goal is not to produce the most precise possible loss estimate — it is to produce a defensible, auditable, reproducible loss distribution that a board can interrogate, challenge, and update as conditions change.
+
+The VaR framing achieves something qualitative risk labels cannot: it puts cybersecurity risk in the same unit of account as credit risk, market risk, and operational risk. A fintech board that already discusses its loan book in terms of expected loss and unexpected loss at the 99th percentile now has a framework for applying the same discipline to ransomware exposure. The numbers will change as the threat environment evolves and as the firm's control posture matures. The structure — frequency times magnitude, decomposed and simulated — does not.
+
+
+## References
+
+The following sources provided the empirical inputs for all frequency and severity parameters in this model. Citations identify the specific edition used; readers verifying model inputs should confirm they are consulting the same edition, as both reports are updated annually.
+
+**[1]** Verizon Business. *2024 Data Breach Investigations Report*. Verizon Communications Inc., 2024. Accessed May 2026.
+Full report: <https://www.verizon.com/business/resources/reports/dbir/>
+Executive summary: <https://www.verizon.com/business/resources/reports/2024-dbir-executive-summary.pdf>
+*Used for:* ransomware incident frequency across industries; financial and insurance sector system intrusion pattern prevalence; base-rate calibration of the Poisson λ parameter.
+
+**[2]** IBM Security and Ponemon Institute. *Cost of a Data Breach Report 2024*. IBM Corporation, 2024. Accessed May 2026.
+<https://www.ibm.com/reports/data-breach>
+*Used for:* average ransomware breach cost ($4.91M global); financial services industry average breach cost ($6.08M); primary/secondary loss decomposition ratios; 50th-percentile severity anchors for log-normal parameterization.
+
+**[3]** FAIR Institute. *Factor Analysis of Information Risk (FAIR) Standard v3.0*. FAIR Institute, January 2025. Accessed May 2026.
+<https://www.fairinstitute.org/>
+*Used for:* conceptual framework governing the LEF × LM risk decomposition; FAIR taxonomy definitions (TEF, Vulnerability, LEF, PLM, SLM, ALE); Monte Carlo simulation as the prescribed aggregation method.
+
+---
+
+## Session Information
+
+```{r}
+#| label: session-info
+#| echo: false
+
+sessioninfo::session_info()
+```
+
+---
+
+*Rendered with [Quarto](https://quarto.org/). Analysis conducted in R using `hfhub` `tok` `tidyverse` `kableExtra` `plotly`*
