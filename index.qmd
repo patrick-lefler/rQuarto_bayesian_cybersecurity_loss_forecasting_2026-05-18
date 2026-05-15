@@ -239,6 +239,8 @@ message("parameters.csv loaded successfully — ",
 
 ### Parameter Calibration
 
+Parameter calibration is necessary because raw numbers from two annual reports do not automatically become model parameters. Instead, they require a documented translation step that converts published industry averages into the specific distributional inputs the simulation engine consumes. This section records that translation in full: every value entering the model is traced to its source, and every assumption made in the absence of a directly published figure is stated explicitly rather than embedded silently in the code.
+
 ```{r}
 #| label: tbl-parameters
 #| echo: true
