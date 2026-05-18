@@ -134,12 +134,11 @@ Despite this, most fintech risk registers still treat ransomware as a qualitativ
 
 This project applies the Factor Analysis of Information Risk (FAIR) framework to close that gap. FAIR treats risk as the probable frequency and probable magnitude of future financial loss — a definition that maps directly onto the tools financial decision-makers already use. By modeling the two components of risk separately and combining them through Monte Carlo simulation, the analysis produces a distribution of probable annualized loss outcomes for a specific, well-defined scenario: a ransomware incident at a small- to mid-market fintech firm. The output is not a label. It is a loss curve — a range of plausible financial outcomes with associated probabilities, expressed in dollars.
 
-The frequency model draws on incident data from the Verizon Data Breach Investigations Report (DBIR), which documented ransomware as a factor in 23.0% of all confirmed breaches in its 2024 edition, affecting 92.0% of industries and representing the dominant action type in financially motivated system intrusion events. The severity model is calibrated to IBM's 2024 Cost of a Data Breach Report, which placed the average ransomware breach cost at $4.91 million globally, with financial services firms incurring average breach costs of $6.08 million — the second highest of any industry. These figures inform the log-normal severity distribution's parameterization and establish the scenario's empirical grounding.
+The frequency model draws on incident data from the Verizon Data Breach Investigations Report (DBIR), which documented ransomware as a factor in 23.0% of all confirmed breaches in its 2024 edition, affecting 92.0% of industries and representing the dominant action type in financially motivated system intrusion events. The severity model is calibrated to IBM's 2024 Cost of a Data Breach Report, which placed the average ransomware breach cost at \$4.91 million globally, with financial services firms incurring average breach costs of \$6.08 million — the second highest of any industry. These figures inform the log-normal severity distribution's parameterization and establish the scenario's empirical grounding.
 
 The analysis decomposes total loss into two components following FAIR's taxonomy. Primary loss captures the direct costs of the event itself: incident response, forensic investigation, system restoration, and ransom payment if applicable. Secondary loss captures the downstream consequences: regulatory fines, litigation, notification costs, and reputational damage expressed as lost business. This separation matters because the two components have different time horizons, different probability structures, and different implications for risk mitigation. Collapsing them into a single figure obscures information a board needs.
 
-The final output — an Annualized Loss Expectancy (ALE) distribution with Value-at-Risk (VaR) figures at the 95th and 99th percentiles — gives the board a financially legible risk statement: not "ransomware risk is high," but "there is a 5.0% probability that annual loss from a ransomware event exceeds $X.XM." That is a number a CFO can work with.
-
+The final output — an Annualized Loss Expectancy (ALE) distribution with Value-at-Risk (VaR) figures at the 95th and 99th percentiles — gives the board a financially legible risk statement: not "ransomware risk is high," but "there is a 5.0% probability that annual loss from a ransomware event exceeds \$X.XM." That is a number a CFO can work with.
 
 ## The FAIR Model
 
@@ -186,17 +185,15 @@ kable(
 
 One departure from standard FAIR practice is worth stating explicitly. Most FAIR practitioners parameterize frequency and magnitude using the beta-PERT distribution, which asks subject matter experts to supply a minimum, most likely, and maximum estimate. This project substitutes Poisson and log-normal distributions in their place, parameterized directly from published industry data rather than expert elicitation. The advantage is empirical grounding: the parameters are auditable and traceable to cited sources rather than dependent on a specific analyst's judgment. The tradeoff is that the model is less flexible for organizations with internal loss data that deviates materially from industry averages. Section 3.4 documents all parameter values and their sources in full.
 
-
 ## Data & Parameter Calibration
 
 All model parameters are derived from two publicly available annual reports: the Verizon Data Breach Investigations Report (DBIR) and the IBM Cost of a Data Breach Report. No proprietary data, internal loss histories, or undocumented assumptions are used. Every value in Table 2 can be verified against the cited source.
 
 **Frequency parameterization.** The Poisson lambda (λ) represents the expected number of ransomware loss events per year for a small- to mid-market fintech firm. The 2024 DBIR reported ransomware as a confirmed action in 23.0% of all verified breaches across 10,626 incidents, affecting 92.0% of industries. Within the financial and insurance sector specifically, system intrusion — the incident classification pattern that encompasses ransomware — was among the top breach patterns. For a firm of this size and sector, a base rate of approximately 0.30 expected incidents per year (roughly one event every three to four years) is a defensible central estimate, consistent with DBIR sector-level frequency data and the operational profile of a firm without a mature security operations capability. The Poisson distribution naturally allows for zero-event years (the most probable single outcome at λ = 0.30) while accommodating the possibility of two or more events in a given year.
 
-**Severity parameterization.** The log-normal distribution is parameterized on the natural-log scale using μ (the mean of log-losses) and σ (the standard deviation of log-losses). These are back-solved from the IBM report's published percentile figures using `qlnorm()`. The 2024 IBM Cost of a Data Breach Report placed the average ransomware breach cost at $4.91M globally and the average for financial services firms at $6.08M — the second highest of any industry. The global average breach cost of $4.88M was composed of approximately $2.08M in direct costs (detection, escalation, notification, and response) and $2.80M in post-breach and lost-business costs. This decomposition directly informs the primary/secondary split described below.
+**Severity parameterization.** The log-normal distribution is parameterized on the natural-log scale using μ (the mean of log-losses) and σ (the standard deviation of log-losses). These are back-solved from the IBM report's published percentile figures using `qlnorm()`. The 2024 IBM Cost of a Data Breach Report placed the average ransomware breach cost at \$4.91M globally and the average for financial services firms at \$6.08M — the second highest of any industry. The global average breach cost of \$4.88M was composed of approximately \$2.08M in direct costs (detection, escalation, notification, and response) and \$2.80M in post-breach and lost-business costs. This decomposition directly informs the primary/secondary split described below.
 
-**Primary/secondary loss split.** IBM's 2024 report attributed $2.80M of the $4.88M global average — approximately 57.4% — to lost business, post-breach customer support, and regulatory fines. The complementary 42.6% covers detection, escalation, notification, and response activities. Applied to the financial services average of $6.08M and rounded to one decimal place, this yields a working split of approximately $2.6M primary and $3.5M secondary. These figures serve as the 50th-percentile anchors for each log-normal distribution. The 90th percentile is set at 2.5× the median for primary loss and 3.5× the median for secondary loss, reflecting the heavier regulatory and litigation tail that financial services firms face relative to the global average. Both multipliers are documented assumptions, not derived values, and are flagged as sensitivity parameters in the Results section.
-
+**Primary/secondary loss split.** IBM's 2024 report attributed \$2.80M of the \$4.88M global average — approximately 57.4% — to lost business, post-breach customer support, and regulatory fines. The complementary 42.6% covers detection, escalation, notification, and response activities. Applied to the financial services average of \$6.08M and rounded to one decimal place, this yields a working split of approximately \$2.6M primary and \$3.5M secondary. These figures serve as the 50th-percentile anchors for each log-normal distribution. The 90th percentile is set at 2.5× the median for primary loss and 3.5× the median for secondary loss, reflecting the heavier regulatory and litigation tail that financial services firms face relative to the global average. Both multipliers are documented assumptions, not derived values, and are flagged as sensitivity parameters in the Results section.
 
 ### Load Parameters Workflow
 
@@ -236,7 +233,6 @@ message("parameters.csv loaded successfully — ",
         n_distinct(params_raw$source_id), " source(s).")
 ```
 
-
 ### Parameter Calibration
 
 Parameter calibration is necessary because raw numbers from two annual reports do not automatically become model parameters. Instead, they require a documented translation step that converts published industry averages into the specific distributional inputs the simulation engine consumes. This section records that translation in full: every value entering the model is traced to its source, and every assumption made in the absence of a directly published figure is stated explicitly rather than embedded silently in the code.
@@ -275,8 +271,7 @@ kable(
   column_spec(5, width = "35%")
 ```
 
-Two parameters warrant specific attention before the model is run. First, λ = 0.30 is a sector-level estimate for a firm without compensating controls. Organizations with mature endpoint detection, tested backups, and network segmentation would reasonably use a lower value; organizations with known gaps or prior incidents might use a higher one. The Results section includes a brief sensitivity sweep across λ ∈ [0.10, 0.30, 0.50] to show how the ALE distribution shifts. Second, the 90th-percentile multipliers for primary and secondary loss are the single most consequential assumptions in the model — the tail behavior of the ALE distribution is more sensitive to σ than to λ. These multipliers are conservative by design and should be revisited if the organization has internal loss data that suggests a narrower or wider severity range.
-
+Two parameters warrant specific attention before the model is run. First, λ = 0.30 is a sector-level estimate for a firm without compensating controls. Organizations with mature endpoint detection, tested backups, and network segmentation would reasonably use a lower value; organizations with known gaps or prior incidents might use a higher one. The Results section includes a brief sensitivity sweep across λ ∈ \[0.10, 0.30, 0.50\] to show how the ALE distribution shifts. Second, the 90th-percentile multipliers for primary and secondary loss are the single most consequential assumptions in the model — the tail behavior of the ALE distribution is more sensitive to σ than to λ. These multipliers are conservative by design and should be revisited if the organization has internal loss data that suggests a narrower or wider severity range.
 
 ## The Loss Model
 
@@ -432,7 +427,6 @@ var_summary <- tibble::tibble(
 )
 ```
 
-
 ## Results
 
 The 100,000-trial Monte Carlo simulation produces a full distribution of probable annual loss outcomes for the base-case scenario (λ = 0.30). The three charts below present that distribution from three angles: the overall ALE histogram with primary/secondary decomposition, the exceedance probability curve with VaR thresholds marked, and the sensitivity of the ALE distribution to the frequency assumption.
@@ -440,9 +434,12 @@ The 100,000-trial Monte Carlo simulation produces a full distribution of probabl
 ### Annualized loss expectancy (ALE) distribution
 
 ::: {.callout-note icon = false}
-## A primer on annualized loss epectancy distributions
+
+## A primer on annualized loss expectancy distributions
+
 An annualized loss expectancy distribution displays the range of total financial losses a firm might absorb in a single year from a specific risk event. Rather than predicting one outcome, it maps thousands of simulated scenarios into a curve — revealing not just what the average year looks like, but how bad the worst 5% or 1% of years could be. The shape of the distribution carries as much information as any single number within it: a wide, right-skewed curve signals that catastrophic outcomes, while rare, are plausible and should anchor capital and insurance planning rather than the average alone.
-::: 
+
+:::
 
 ```{r}
 #| label: fig-ale-histogram
@@ -510,9 +507,13 @@ ggplotly(p_hist, tooltip = c("x", "y", "fill")) |>
 ### Exceedance probability curve
 
 ::: {.callout-note icon = false}
+
 ## A primer on exceedance probability curves
-An exceedance probability curve answers the question for every dollar threshold on the horizontal axis: what is the probability that annual loss exceeds that amount? Reading from left to right, the curve declines as the threshold rises — losses above $1M are more probable than losses above $10M. The curve does not predict when a loss will occur; it quantifies how much financial exposure sits in the tail of the distribution. The gap between the VaR 95 and VaR 99 thresholds — visible as a flat stretch near the bottom of the curve — measures the additional exposure a firm accepts by planning only to the 95th percentile.
+
+An exceedance probability curve answers the question for every dollar threshold on the horizontal axis: what is the probability that annual loss exceeds that amount? Reading from left to right, the curve declines as the threshold rises — losses above \$1M are more probable than losses above \$10M. The curve does not predict when a loss will occur; it quantifies how much financial exposure sits in the tail of the distribution. The gap between the VaR 95 and VaR 99 thresholds — visible as a flat stretch near the bottom of the curve — measures the additional exposure a firm accepts by planning only to the 95th percentile. 
+
 :::
+
 
 ```{r}
 #| label: fig-exceedance
@@ -661,17 +662,13 @@ Five findings from the simulation stand out as decision-relevant for a fintech b
 
 **Secondary loss is the dominant risk driver, not primary loss.** Across every percentile in Table 3, secondary loss exceeds primary loss — and the gap widens as the percentile rises. At the mean, secondary loss accounts for roughly 57% of total ALE. At the 99th percentile, the proportion is higher still, because the regulatory and litigation tail is heavier than the operational response tail. This is the figure that should drive the board's risk mitigation prioritization. Investing in faster breach detection and containment — which reduces primary loss — is necessary but not sufficient. The larger exposure sits in the regulatory and legal aftermath, which means legal preparedness, regulatory relationship management, and breach notification protocols are at least as important as technical controls.
 
-**The difference between VaR 95 and VaR 99 is not a rounding error.** The gap between the 95th and 99th percentile ALE figures — approximately $13.7M in this simulation — represents the additional loss absorbed in the worst 1.0% of years relative to the worst 5.0% of years. For a small- to mid-market fintech firm with limited capital reserves, this tail premium is the number that belongs in the board's capital adequacy discussion, not the mean ALE. The mean is useful for budgeting insurance and control investment; the 99th percentile is the number relevant to solvency planning.
+**The difference between VaR 95 and VaR 99 is not a rounding error.** The gap between the 95th and 99th percentile ALE figures — approximately \$13.7M in this simulation — represents the additional loss absorbed in the worst 1.0% of years relative to the worst 5.0% of years. For a small- to mid-market fintech firm with limited capital reserves, this tail premium is the number that belongs in the board's capital adequacy discussion, not the mean ALE. The mean is useful for budgeting insurance and control investment; the 99th percentile is the number relevant to solvency planning.
 
 **Frequency is not a background assumption — it is a management decision.** The sensitivity analysis in Figure 3 makes this concrete. The difference between λ = 0.10 and λ = 0.50 is not a difference in how bad the threat environment is — it is a difference in how effective the firm's controls are. A firm that invests in endpoint detection, network segmentation, and tested backup recovery is modeling a λ closer to 0.10. A firm with known gaps in those areas is closer to λ = 0.50. The ALE distribution shifts materially between those two values. Security investment, framed this way, is not a cost center — it is a direct reduction in the expected value of the loss distribution, measurable in dollars.
 
-::: {.callout-important icon = false}
-## Two additional insights for senior risk executives and board members
-:::
+**The median ALE of \$0.0M is not reassuring; it is a structural warning.** Table 3 shows a median annual loss of zero, which follows directly from the Poisson frequency model: at λ = 0.30, approximately 74.1% of simulated years produce no ransomware event at all. A board that anchors on the median as its planning figure has miscalibrated its risk posture in a specific and dangerous way. This is a well-documented failure mode in low-frequency, high-severity risk management — years pass without incident, controls atrophy, budgets compress, and the organization interprets silence as safety. The correct planning figures for capital allocation, insurance sizing, and control investment are the mean (\$2.7M) and the tail percentiles. The median is not zero because the risk is small; it is zero because ransomware is a rare but severe event. That distinction is the entire point of this model.
 
-**The median ALE of $0.0M is not reassuring; it is a structural warning.** Table 3 shows a median annual loss of zero, which follows directly from the Poisson frequency model: at λ = 0.30, approximately 74.1% of simulated years produce no ransomware event at all. A board that anchors on the median as its planning figure has miscalibrated its risk posture in a specific and dangerous way. This is a well-documented failure mode in low-frequency, high-severity risk management — years pass without incident, controls atrophy, budgets compress, and the organization interprets silence as safety. The correct planning figures for capital allocation, insurance sizing, and control investment are the mean ($2.7M) and the tail percentiles. The median is not zero because the risk is small; it is zero because ransomware is a rare but severe event. That distinction is the entire point of this model.
-
-**The ratio of VaR 99 to mean ALE is the leverage ratio of this risk; and it is extreme.** At $28.6M VaR 99 against a $2.7M mean ALE, the tail-to-mean ratio is approximately 10.6×. In financial risk terms this is extraordinary tail leverage. A well-diversified investment-grade credit portfolio typically carries a VaR 99 to expected loss ratio of 3–5×; a concentrated single-name exposure might reach 7–8×. Cyber risk at 10.6× sits outside the range most operational risk frameworks are designed to handle. The practical implication is direct: conventional operational risk reserve methodologies — which size capital as a multiple of expected loss — will systematically undercapitalize against cyber tail events. Boards that govern fintech firms need to recognize that the insurance and capital structures appropriate for market or credit risk require material adjustment before they are fit for purpose against a distribution with this tail profile.
+**The ratio of VaR 99 to mean ALE is the leverage ratio of this risk; and it is extreme.** At \$28.6M VaR 99 against a \$2.7M mean ALE, the tail-to-mean ratio is approximately 10.6×. In financial risk terms this is extraordinary tail leverage. A well-diversified investment-grade credit portfolio typically carries a VaR 99 to expected loss ratio of 3–5×; a concentrated single-name exposure might reach 7–8×. Cyber risk at 10.6× sits outside the range most operational risk frameworks are designed to handle. The practical implication is direct: conventional operational risk reserve methodologies — which size capital as a multiple of expected loss — will systematically undercapitalize against cyber tail events. Boards that govern fintech firms need to recognize that the insurance and capital structures appropriate for market or credit risk require material adjustment before they are fit for purpose against a distribution with this tail profile.
 
 ### Conclusion
 
@@ -679,25 +676,17 @@ The model presented here is deliberately constrained. It uses two public data so
 
 The VaR framing achieves something qualitative risk labels cannot: it puts cybersecurity risk in the same unit of account as credit risk, market risk, and operational risk. A fintech board that already discusses its loan book in terms of expected loss and unexpected loss at the 99th percentile now has a framework for applying the same discipline to ransomware exposure. The numbers will change as the threat environment evolves and as the firm's control posture matures. The structure — frequency times magnitude, decomposed and simulated — does not.
 
-
 ## References
 
 The following sources provided the empirical inputs for all frequency and severity parameters in this model. Citations identify the specific edition used; readers verifying model inputs should confirm they are consulting the same edition, as both reports are updated annually.
 
-**[1]** Verizon Business. *2024 Data Breach Investigations Report*. Verizon Communications Inc., 2024. Accessed May 2026.
-Full report: <https://www.verizon.com/business/resources/reports/dbir/>
-Executive summary: <https://www.verizon.com/business/resources/reports/2024-dbir-executive-summary.pdf>
-*Used for:* ransomware incident frequency across industries; financial and insurance sector system intrusion pattern prevalence; base-rate calibration of the Poisson λ parameter.
+**\[1\]** Verizon Business. *2024 Data Breach Investigations Report*. Verizon Communications Inc., 2024. Accessed May 2026. Full report: <https://www.verizon.com/business/resources/reports/dbir/> Executive summary: <https://www.verizon.com/business/resources/reports/2024-dbir-executive-summary.pdf> *Used for:* ransomware incident frequency across industries; financial and insurance sector system intrusion pattern prevalence; base-rate calibration of the Poisson λ parameter.
 
-**[2]** IBM Security and Ponemon Institute. *Cost of a Data Breach Report 2024*. IBM Corporation, 2024. Accessed May 2026.
-<https://www.ibm.com/reports/data-breach>
-*Used for:* average ransomware breach cost ($4.91M global); financial services industry average breach cost ($6.08M); primary/secondary loss decomposition ratios; 50th-percentile severity anchors for log-normal parameterization.
+**\[2\]** IBM Security and Ponemon Institute. *Cost of a Data Breach Report 2024*. IBM Corporation, 2024. Accessed May 2026. <https://www.ibm.com/reports/data-breach> *Used for:* average ransomware breach cost (\$4.91M global); financial services industry average breach cost (\$6.08M); primary/secondary loss decomposition ratios; 50th-percentile severity anchors for log-normal parameterization.
 
-**[3]** FAIR Institute. *Factor Analysis of Information Risk (FAIR) Standard v3.0*. FAIR Institute, January 2025. Accessed May 2026.
-<https://www.fairinstitute.org/>
-*Used for:* conceptual framework governing the LEF × LM risk decomposition; FAIR taxonomy definitions (TEF, Vulnerability, LEF, PLM, SLM, ALE); Monte Carlo simulation as the prescribed aggregation method.
+**\[3\]** FAIR Institute. *Factor Analysis of Information Risk (FAIR) Standard v3.0*. FAIR Institute, January 2025. Accessed May 2026. <https://www.fairinstitute.org/> *Used for:* conceptual framework governing the LEF × LM risk decomposition; FAIR taxonomy definitions (TEF, Vulnerability, LEF, PLM, SLM, ALE); Monte Carlo simulation as the prescribed aggregation method.
 
----
+------------------------------------------------------------------------
 
 ## Session Information
 
@@ -708,6 +697,6 @@ Executive summary: <https://www.verizon.com/business/resources/reports/2024-dbir
 sessioninfo::session_info()
 ```
 
----
+------------------------------------------------------------------------
 
 *Rendered with [Quarto](https://quarto.org/). Analysis conducted in R using `hfhub` `tok` `tidyverse` `kableExtra` `plotly`*
