@@ -443,7 +443,7 @@ An annualized loss expectancy distribution displays the range of total financial
 
 ```{r}
 #| label: fig-ale-histogram
-#| fig-cap: "Figure 1: Simulated annual loss distribution decomposed into primary and secondary loss components (λ = 0.30, n = 100,000 trials). Trials with zero events — approximately 74.1% of the distribution — are excluded to focus the view on loss-event years. VaR thresholds at the 95th and 99th percentiles are marked. The long right tail reflects the log-normal severity assumption; most loss-event years cluster below $5M, but the tail extends well beyond $20M."
+#| fig-cap: "Simulated annual loss distribution decomposed into primary and secondary loss components (λ = 0.30, n = 100,000 trials). Trials with zero events — approximately 74.1% of the distribution — are excluded to focus the view on loss-event years. VaR thresholds at the 95th and 99th percentiles are marked. The long right tail reflects the log-normal severity assumption; most loss-event years cluster below $5M, but the tail extends well beyond $20M."
 
 ale_plot_df <- tibble::tibble(
   primary   = decomp_base$primary,
@@ -517,7 +517,7 @@ An exceedance probability curve answers the question for every dollar threshold 
 
 ```{r}
 #| label: fig-exceedance
-#| fig-cap: "Figure 2: Exceedance probability curve — the probability that annual loss exceeds a given dollar threshold (λ = 0.30, n = 100,000 trials, loss-event years only). The curve declines steeply below $5M, reflecting the concentration of moderate-cost events, then flattens into a long tail. At the VaR 95 threshold, there is a 5.0% probability of annual loss exceeding that figure; at VaR 99, a 1.0% probability. The gap between the two thresholds measures the tail risk premium — the additional exposure a firm accepts by planning only to the 95th percentile."
+#| fig-cap: "Exceedance probability curve — the probability that annual loss exceeds a given dollar threshold (λ = 0.30, n = 100,000 trials, loss-event years only). The curve declines steeply below $5M, reflecting the concentration of moderate-cost events, then flattens into a long tail. At the VaR 95 threshold, there is a 5.0% probability of annual loss exceeding that figure; at VaR 99, a 1.0% probability. The gap between the two thresholds measures the tail risk premium — the additional exposure a firm accepts by planning only to the 95th percentile."
 
 exceedance_df <- tibble::tibble(loss = ale_base[ale_base > 0] / 1e6) |>
   dplyr::arrange(loss) |>
@@ -617,7 +617,7 @@ kable(
 
 ```{r}
 #| label: fig-sensitivity
-#| fig-cap: "Figure 3: Sensitivity of the ALE distribution to the Poisson frequency parameter λ (n = 100,000 trials per scenario, loss-event years only). Moving from λ = 0.10 to λ = 0.50 shifts both the central mass and the tail of the distribution substantially — the VaR 95 roughly triples across that range. This sensitivity underscores that frequency is not a cosmetic input: an organization with a strong security posture and λ closer to 0.10 faces a materially different risk profile than one with known control gaps at λ = 0.50."
+#| fig-cap: "Sensitivity of the ALE distribution to the Poisson frequency parameter λ (n = 100,000 trials per scenario, loss-event years only). Moving from λ = 0.10 to λ = 0.50 shifts both the central mass and the tail of the distribution substantially — the VaR 95 roughly triples across that range. This sensitivity underscores that frequency is not a cosmetic input: an organization with a strong security posture and λ closer to 0.10 faces a materially different risk profile than one with known control gaps at λ = 0.50."
 
 sens_nonzero <- sensitivity_df |>
   dplyr::filter(ale > 0) |>
