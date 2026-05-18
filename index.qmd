@@ -1,6 +1,6 @@
 ---
 title: "Bayesian Cybersecurity Loss Forecasting"
-subtitle: "A FAIR-Aligned Ransomware Risk Quantification Model for Fintech Firms"
+subtitle: "Translating Ransomware Exposure into Value-at-Risk"
 author: "Patrick Lefler"
 abstract:
   "Qualitative risk labels - <b>High, Critical, Red</b> — fail to support the financial
@@ -510,10 +510,9 @@ ggplotly(p_hist, tooltip = c("x", "y", "fill")) |>
 
 ## A primer on exceedance probability curves
 
-An exceedance probability curve answers the question for every dollar threshold on the horizontal axis: what is the probability that annual loss exceeds that amount? Reading from left to right, the curve declines as the threshold rises — losses above \$1M are more probable than losses above \$10M. The curve does not predict when a loss will occur; it quantifies how much financial exposure sits in the tail of the distribution. The gap between the VaR 95 and VaR 99 thresholds — visible as a flat stretch near the bottom of the curve — measures the additional exposure a firm accepts by planning only to the 95th percentile. 
+An exceedance probability curve answers the question for every dollar threshold on the horizontal axis: what is the probability that annual loss exceeds that amount? Reading from left to right, the curve declines as the threshold rises — losses above \$1M are more probable than losses above \$10M. The curve does not predict when a loss will occur; it quantifies how much financial exposure sits in the tail of the distribution. The gap between the VaR 95 and VaR 99 thresholds — visible as a flat stretch near the bottom of the curve — measures the additional exposure a firm accepts by planning only to the 95th percentile.
 
 :::
-
 
 ```{r}
 #| label: fig-exceedance
@@ -699,4 +698,4 @@ sessioninfo::session_info()
 
 ------------------------------------------------------------------------
 
-*Rendered with [Quarto](https://quarto.org/). Analysis conducted in R using `hfhub` `tok` `tidyverse` `kableExtra` `plotly`*
+*Rendered with [Quarto](https://quarto.org/). Analysis conducted in R using `hfhubtoktidyversekableExtraplotly`*
